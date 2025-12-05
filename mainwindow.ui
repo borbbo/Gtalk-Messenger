@@ -51,7 +51,7 @@
       <x>40</x>
       <y>90</y>
       <width>721</width>
-      <height>371</height>
+      <height>341</height>
      </rect>
     </property>
    </widget>
@@ -59,7 +59,7 @@
     <property name="geometry">
      <rect>
       <x>40</x>
-      <y>490</y>
+      <y>450</y>
       <width>611</width>
       <height>41</height>
      </rect>
@@ -69,7 +69,7 @@
     <property name="geometry">
      <rect>
       <x>670</x>
-      <y>490</y>
+      <y>450</y>
       <width>91</width>
       <height>41</height>
      </rect>
@@ -106,6 +106,32 @@
      <string>Enter ID :</string>
     </property>
    </widget>
+   <widget class="QLabel" name="label_3">
+    <property name="geometry">
+     <rect>
+      <x>640</x>
+      <y>520</y>
+      <width>31</width>
+      <height>16</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>File :</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="fileBtn">
+    <property name="geometry">
+     <rect>
+      <x>680</x>
+      <y>510</y>
+      <width>81</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>File Send</string>
+    </property>
+   </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">
@@ -113,7 +139,7 @@
      <x>0</x>
      <y>0</y>
      <width>800</width>
-     <height>20</height>
+     <height>19</height>
     </rect>
    </property>
   </widget>

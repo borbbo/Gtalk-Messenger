@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QSocketNotifier> // Class for monitoring file descriptors (sockets)
 #include "protocol.h"      // Protocol definition header
+#include <QFileDialog> // [Add this] For opening file explorer
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -24,6 +25,8 @@ private slots:
 
     // Slot function to handle incoming data from the server
     void on_socket_read();
+    // ▼ [Add this line] Slot for file button
+    void on_fileBtn_clicked();
 
 private:
     Ui::MainWindow *ui;

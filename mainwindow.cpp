@@ -122,3 +122,50 @@ void MainWindow::on_socket_read()
         ui->textBrowser->append(showMsg);
     }
 }
+
+// [4] File Button Clicked (Task for Member B)
+void MainWindow::on_fileBtn_clicked()
+{
+    // 1. Check Connection
+    if(sock == -1) {
+        QMessageBox::warning(this, "Warning", "Please connect to the server first.");
+        return;
+    }
+
+    // 2. Open File Dialog
+    QString fileName = QFileDialog::getOpenFileName(this, "Select File", "", "All Files (*.*)");
+    if(fileName.isEmpty()) return; // If cancelled
+
+    QFile file(fileName);
+    if(!file.open(QIODevice::ReadOnly)) {
+        QMessageBox::warning(this, "Error", "Cannot open file!");
+        return;
+    }
+
+    // 3. Read File Data
+    // Read up to BUF_SIZE (defined in protocol.h)
+    QByteArray fileData = file.read(BUF_SIZE);
+    QFileInfo fileInfo(fileName);
+
+    // 4. Create Packet
+    Packet p;
+    p.cmd = CMD_FILE; // Set Command to File Transfer
+
+    // Copy User ID (using the member variable 'myId')
+    strcpy(p.id, myId.toStdString().c_str());
+
+    // Copy File Name (Only the name, not the full path)
+    strcpy(p.fileName, fileInfo.fileName().toStdString().c_str());
+
+    // Copy Binary Data (Important: Use memcpy for binary, not strcpy)
+    memcpy(p.data, fileData.data(), fileData.size());
+    p.data_len = fileData.size(); // Set actual data size
+
+    // 5. Send Packet to Server
+    ::write(sock, &p, sizeof(p));
+
+    // 6. UI Feedback
+    ui->textBrowser->append("[System] File sent: " + fileInfo.fileName());
+
+    file.close();
+}
