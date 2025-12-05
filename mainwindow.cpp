@@ -28,6 +28,13 @@ MainWindow::~MainWindow()
 // [1] Connect Button
 void MainWindow::on_connectBtn_clicked()
 {
+    // 1. Check ID input
+    QString inputId = ui->idEdit->text();
+    if(inputId.isEmpty()) {
+        QMessageBox::warning(this, "Warning", "Please enter your ID.");
+        return;
+    }
+
     struct sockaddr_in serv_addr;
 
     // 1. Create Socket
@@ -67,10 +74,9 @@ void MainWindow::on_sendBtn_clicked()
 
     Packet p;
     p.cmd = CMD_MSG;
-    strcpy(p.id, "Bomin");
+    strcpy(p.id, "Bomin"); // Later replace with actual user ID
     strcpy(p.msg, msg.toStdString().c_str());
 
-    // Send data (Added ::)
     ::write(sock, &p, sizeof(p));
 
     ui->lineEdit->clear();
@@ -80,13 +86,12 @@ void MainWindow::on_sendBtn_clicked()
 void MainWindow::on_socket_read()
 {
     Packet p;
-    // Read data (Added ::)
     int str_len = ::read(sock, &p, sizeof(p));
 
     if(str_len == 0) {
-        ui->textBrowser->append("=== Disconnected ===");
+        ui->textBrowser->append("=== Disconnected from Server ===");
         notifier->setEnabled(false);
-        ::close(sock); // Added ::
+        ::close(sock);
         sock = -1;
         ui->connectBtn->setEnabled(true);
         return;
