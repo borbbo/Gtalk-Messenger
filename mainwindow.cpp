@@ -87,16 +87,56 @@ void MainWindow::on_roomListWidget_itemDoubleClicked(QListWidgetItem *item) {
 // To be implemented by Team Member B
 // ============================================================
 
+// 1. Send Message Logic
 void MainWindow::on_sendBtn_clicked() {
-    // TODO: Member B - Implement Send Message Logic
+    QString msg = ui->msgEdit->text();
+    if(msg.isEmpty()) return;
+
+    Packet p;
+    p.cmd = CMD_MSG;
+    strcpy(p.id, myId.toStdString().c_str());
+    strcpy(p.msg, msg.toStdString().c_str());
+    p.roomID = currentRoomID; // Send to current room only
+    ::write(sock, &p, sizeof(p));
+
+    ui->msgEdit->clear();
 }
 
+// 2. File Transfer Logic
 void MainWindow::on_fileBtn_clicked() {
-    // TODO: Member B - Implement File Transfer Logic
+    QString fileName = QFileDialog::getOpenFileName(this, "Select File");
+    if(fileName.isEmpty()) return;
+
+    QFile file(fileName);
+    if(!file.open(QIODevice::ReadOnly)) return;
+
+    // Read file data
+    QByteArray fileData = file.read(BUF_SIZE);
+    QFileInfo fileInfo(fileName);
+
+    Packet p;
+    p.cmd = CMD_FILE; // Protocol 301
+    strcpy(p.id, myId.toStdString().c_str());
+    strcpy(p.fileName, fileInfo.fileName().toStdString().c_str());
+    memcpy(p.data, fileData.data(), fileData.size()); // Binary copy
+    p.data_len = fileData.size();
+    p.roomID = currentRoomID;
+
+    ::write(sock, &p, sizeof(p));
+
+    ui->textBrowser->append("[System] File sent: " + fileInfo.fileName());
+    file.close();
 }
 
+// 3. Leave Room Logic
 void MainWindow::on_leaveBtn_clicked() {
-    // TODO: Member B - Implement Leave Room Logic
+    // Go back to Lobby (Page 1)
+    ui->stackedWidget->setCurrentIndex(1);
+    ui->textBrowser->clear();
+    currentRoomID = -1;
+
+    // Refresh room list
+    on_refreshBtn_clicked();
 }
 
 // ============================================================
