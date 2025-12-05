@@ -1,0 +1,8 @@
+build-*/
+*.o
+*.moc
+*.ui_headers
+Makefile
+*.pro.user
+Gtalk
+server
