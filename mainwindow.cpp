@@ -96,10 +96,11 @@ void MainWindow::on_sendBtn_clicked()
     ui->lineEdit->clear();
 }
 
-// [3] Receive Data
+// [3] Receive Data from Server (Updated)
 void MainWindow::on_socket_read()
 {
     Packet p;
+    // Read data from socket
     int str_len = ::read(sock, &p, sizeof(p));
 
     if(str_len == 0) {
@@ -117,9 +118,13 @@ void MainWindow::on_socket_read()
         ui->textBrowser->append(">>> " + QString(p.id) + " joined the chat.");
     }
     else if (p.cmd == CMD_MSG) {
-        // [Fixed] Use 'data' instead of 'msg'
         QString showMsg = QString("[%1] %2").arg(p.id).arg(p.data);
         ui->textBrowser->append(showMsg);
+    }
+    else if (p.cmd == CMD_FILE) {
+        QString sender = QString(p.id);
+        QString fName = QString(p.fileName);
+        ui->textBrowser->append(">>> Incoming File from " + sender + ": " + fName);
     }
 }
 
