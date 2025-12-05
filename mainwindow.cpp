@@ -61,25 +61,83 @@ void MainWindow::connectToServer() {
 // To be implemented by Team Member A
 // ============================================================
 
+// 1. Login Button Logic
 void MainWindow::on_loginBtn_clicked() {
-    // TODO: Member A - Implement Login Logic
+    QString id = ui->loginIdEdit->text();
+    QString pw = ui->loginPwEdit->text();
+
+    if(id.isEmpty() || pw.isEmpty()) {
+        QMessageBox::warning(this, "Warning", "Please enter ID and Password.");
+        return;
+    }
+
+    connectToServer(); // Connect to server
+    if(sock == -1) return;
+
+    Packet p;
+    p.cmd = CMD_LOGIN;
+    strcpy(p.id, id.toStdString().c_str());
+    strcpy(p.pwd, pw.toStdString().c_str());
+    ::write(sock, &p, sizeof(p));
+
+    myId = id; // Store ID temporarily
 }
 
+// 2. Register Button Logic
 void MainWindow::on_registerBtn_clicked() {
-    // TODO: Member A - Implement Register Logic
+    QString id = ui->loginIdEdit->text();
+    QString pw = ui->loginPwEdit->text();
+
+    if(id.isEmpty() || pw.isEmpty()) {
+        QMessageBox::warning(this, "Warning", "Enter ID/PW for registration.");
+        return;
+    }
+
+    connectToServer();
+    if(sock == -1) return;
+
+    Packet p;
+    p.cmd = CMD_REGISTER;
+    strcpy(p.id, id.toStdString().c_str());
+    strcpy(p.pwd, pw.toStdString().c_str());
+    ::write(sock, &p, sizeof(p));
 }
 
+// 3. Create Room Button Logic
 void MainWindow::on_createRoomBtn_clicked() {
-    // TODO: Member A - Implement Create Room Logic
+    bool ok;
+    QString title = QInputDialog::getText(this, "Create Room", "Enter Room Title:", QLineEdit::Normal, "", &ok);
+    if (!ok || title.isEmpty()) return;
+
+    Packet p;
+    p.cmd = CMD_CREATE_ROOM;
+    strcpy(p.id, myId.toStdString().c_str());
+    strcpy(p.msg, title.toStdString().c_str());
+    ::write(sock, &p, sizeof(p));
 }
 
+// 4. Refresh Button Logic
 void MainWindow::on_refreshBtn_clicked() {
-    // TODO: Member A - Implement Refresh Room List Logic
+    Packet p;
+    p.cmd = CMD_ROOM_LIST;
+    strcpy(p.id, myId.toStdString().c_str());
+    ::write(sock, &p, sizeof(p));
 }
 
+// 5. Join Room Logic (Double Click)
 void MainWindow::on_roomListWidget_itemDoubleClicked(QListWidgetItem *item) {
-    // TODO: Member A - Implement Join Room Logic
-    (void)item; // Unused parameter warning suppression
+    QString text = item->text();
+    // Parse Room ID from string "ID:Title"
+    QStringList parts = text.split(":");
+    if(parts.size() < 2) return;
+
+    int roomID = parts.first().toInt();
+
+    Packet p;
+    p.cmd = CMD_JOIN_ROOM;
+    strcpy(p.id, myId.toStdString().c_str());
+    p.roomID = roomID;
+    ::write(sock, &p, sizeof(p));
 }
 
 // ============================================================
