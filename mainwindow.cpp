@@ -16,6 +16,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
     sock = -1;
+    this->setWindowTitle("Gtalk - Open Source Project");
 }
 
 MainWindow::~MainWindow()
@@ -25,20 +26,20 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-// [1] Connect Button
+// [1] Connect Button Clicked
 void MainWindow::on_connectBtn_clicked()
 {
-    // 1. Check ID input
-    QString inputId = ui->idEdit->text();
-    if(inputId.isEmpty()) {
+    // 1. Validate ID input
+    myId = ui->idEdit->text();
+    if(myId.isEmpty()) {
         QMessageBox::warning(this, "Warning", "Please enter your ID.");
         return;
     }
 
     struct sockaddr_in serv_addr;
 
-    // 1. Create Socket
-    sock = ::socket(PF_INET, SOCK_STREAM, 0); // Added ::
+    // 2. Create Socket
+    sock = ::socket(PF_INET, SOCK_STREAM, 0);
     if(sock == -1) {
         QMessageBox::critical(this, "Error", "Socket creation failed!");
         return;
@@ -49,22 +50,30 @@ void MainWindow::on_connectBtn_clicked()
     serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
     serv_addr.sin_port = htons(PORT);
 
-    // 2. Connect (Added :: to verify it is Linux connect, not Qt connect)
+    // 3. Connect to Server
     if(::connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == -1) {
         QMessageBox::critical(this, "Error", "Connect failed! (Is server running?)");
         return;
     }
 
-    // 3. UI Update
-    ui->textBrowser->append("=== Connected to Server ===");
-    ui->connectBtn->setEnabled(false);
+    // 4. Send Login Packet
+    Packet p;
+    p.cmd = CMD_LOGIN;
+    strcpy(p.id, myId.toStdString().c_str());
+    p.data_len = 0;
+    ::write(sock, &p, sizeof(p));
 
-    // 4. Register Socket Notifier
+    // 5. Update UI
+    ui->textBrowser->append("=== Connected as " + myId + " ===");
+    ui->connectBtn->setEnabled(false);
+    ui->idEdit->setEnabled(false);
+
+    // 6. Register Socket Notifier
     notifier = new QSocketNotifier(sock, QSocketNotifier::Read, this);
     connect(notifier, &QSocketNotifier::activated, this, &MainWindow::on_socket_read);
 }
 
-// [2] Send Button
+// [2] Send Button Clicked
 void MainWindow::on_sendBtn_clicked()
 {
     if(sock == -1) return;
@@ -74,8 +83,13 @@ void MainWindow::on_sendBtn_clicked()
 
     Packet p;
     p.cmd = CMD_MSG;
-    strcpy(p.id, "Bomin"); // Later replace with actual user ID
-    strcpy(p.msg, msg.toStdString().c_str());
+
+    // Use stored 'myId'
+    strcpy(p.id, myId.toStdString().c_str());
+
+    // [Fixed] Use 'data' instead of 'msg'
+    strcpy(p.data, msg.toStdString().c_str());
+    p.data_len = strlen(p.data);
 
     ::write(sock, &p, sizeof(p));
 
@@ -94,9 +108,17 @@ void MainWindow::on_socket_read()
         ::close(sock);
         sock = -1;
         ui->connectBtn->setEnabled(true);
+        ui->idEdit->setEnabled(true);
         return;
     }
 
-    QString showMsg = QString("[%1] %2").arg(p.id).arg(p.msg);
-    ui->textBrowser->append(showMsg);
+    // Handle Commands
+    if (p.cmd == CMD_LOGIN) {
+        ui->textBrowser->append(">>> " + QString(p.id) + " joined the chat.");
+    }
+    else if (p.cmd == CMD_MSG) {
+        // [Fixed] Use 'data' instead of 'msg'
+        QString showMsg = QString("[%1] %2").arg(p.id).arg(p.data);
+        ui->textBrowser->append(showMsg);
+    }
 }

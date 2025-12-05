@@ -29,5 +29,7 @@ private:
     Ui::MainWindow *ui;
     int sock;                   // Linux socket file descriptor
     QSocketNotifier *notifier;  // Socket event notifier
+
+    QString myId; // variable: login id
 };
 #endif // MAINWINDOW_H

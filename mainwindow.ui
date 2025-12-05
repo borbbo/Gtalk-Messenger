@@ -91,14 +91,19 @@
    <widget class="QLabel" name="label_2">
     <property name="geometry">
      <rect>
-      <x>470</x>
+      <x>460</x>
       <y>50</y>
-      <width>57</width>
-      <height>14</height>
+      <width>71</width>
+      <height>20</height>
      </rect>
     </property>
+    <property name="font">
+     <font>
+      <pointsize>11</pointsize>
+     </font>
+    </property>
     <property name="text">
-     <string>ID_Input:</string>
+     <string>Enter ID :</string>
     </property>
    </widget>
   </widget>
@@ -108,7 +113,7 @@
      <x>0</x>
      <y>0</y>
      <width>800</width>
-     <height>19</height>
+     <height>20</height>
     </rect>
    </property>
   </widget>
