@@ -2,9 +2,10 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-#include <QSocketNotifier> // Class for monitoring file descriptors (sockets)
-#include "protocol.h"      // Protocol definition header
-#include <QFileDialog> // [Add this] For opening file explorer
+#include <QSocketNotifier>
+#include <QFileDialog>
+#include <QListWidgetItem> // Required for handling room list clicks
+#include "protocol.h"      // Must use the updated V2 protocol
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -19,20 +20,33 @@ public:
     ~MainWindow();
 
 private slots:
-    // Slot functions for UI button clicks
-    void on_connectBtn_clicked();
-    void on_sendBtn_clicked();
+    // [Page 0: Login Screen]
+    void on_loginBtn_clicked();
+    void on_registerBtn_clicked();
 
-    // Slot function to handle incoming data from the server
-    void on_socket_read();
-    // ▼ [Add this line] Slot for file button
+    // [Page 1: Lobby Screen]
+    void on_createRoomBtn_clicked();
+    void on_refreshBtn_clicked();
+    void on_roomListWidget_itemDoubleClicked(QListWidgetItem *item); // Join room on double click
+
+    // [Page 2: Chat Room Screen]
+    void on_sendBtn_clicked();
     void on_fileBtn_clicked();
+    void on_leaveBtn_clicked(); // Exit room and return to lobby
+
+    // [Network Handler]
+    void on_socket_read();
 
 private:
     Ui::MainWindow *ui;
-    int sock;                   // Linux socket file descriptor
-    QSocketNotifier *notifier;  // Socket event notifier
+    int sock;
+    QSocketNotifier *notifier;
 
-    QString myId; // variable: login id
+    // User Session Data
+    QString myId;
+    int currentRoomID; // -1: Lobby, >=0: In a Room
+
+    // Helper function to establish connection
+    void connectToServer();
 };
 #endif // MAINWINDOW_H
