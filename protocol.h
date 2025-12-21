@@ -18,6 +18,7 @@
 #define CMD_JOIN_ROOM   201 // Join an existing room
 #define CMD_LEAVE_ROOM  202 // Leave room (Go to Lobby)
 #define CMD_ROOM_LIST   203 // Request room list
+#define CMD_USER_LIST   204 // userlist
 
 // [Chat & File]
 #define CMD_MSG         300 // Send Message

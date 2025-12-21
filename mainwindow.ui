@@ -20,7 +20,7 @@
       <item row="0" column="0">
        <widget class="QStackedWidget" name="stackedWidget">
         <property name="currentIndex">
-         <number>0</number>
+         <number>1</number>
         </property>
         <widget class="QWidget" name="page">
          <widget class="QLineEdit" name="loginIdEdit">
@@ -149,7 +149,7 @@
            </rect>
           </property>
           <property name="text">
-           <string>Rfresh</string>
+           <string>Refresh</string>
           </property>
          </widget>
          <widget class="QLabel" name="label_3">
@@ -177,7 +177,7 @@
            <rect>
             <x>20</x>
             <y>50</y>
-            <width>881</width>
+            <width>701</width>
             <height>451</height>
            </rect>
           </property>
@@ -232,6 +232,34 @@
           </property>
           <property name="text">
            <string>Exit Room</string>
+          </property>
+         </widget>
+         <widget class="QListWidget" name="userListWidget">
+          <property name="geometry">
+           <rect>
+            <x>730</x>
+            <y>280</y>
+            <width>171</width>
+            <height>221</height>
+           </rect>
+          </property>
+         </widget>
+         <widget class="QLabel" name="label_4">
+          <property name="geometry">
+           <rect>
+            <x>730</x>
+            <y>260</y>
+            <width>71</width>
+            <height>21</height>
+           </rect>
+          </property>
+          <property name="font">
+           <font>
+            <pointsize>10</pointsize>
+           </font>
+          </property>
+          <property name="text">
+           <string>User List</string>
           </property>
          </widget>
         </widget>

@@ -21,22 +21,24 @@ using namespace std;
 #define EPOLL_SIZE 500
 const string USER_FILE = "users.txt"; // File to store user credentials
 
-// [Data Structure: User]
+// Data Structure: User
 struct User {
     int socket;
     string id;
+    string nickname; // nickname for chat room
     int currentRoomID; // -1: Lobby, >=0: Specific Room ID
     bool isLoggedIn;
 };
 
-// [Data Structure: Room]
+// Data Structure: Room
 struct Room {
     int id;
     string title;
+    string password;
     vector<int> userSockets; // List of sockets in this room
 };
 
-// [Global Variables]
+// Global Variables
 map<int, User*> connectedUsers;   // Key: Socket, Value: User Info
 map<int, Room*> activeRooms;      // Key: RoomID, Value: Room Info
 map<string, string> userDB;       // Key: ID, Value: Password (Loaded from file)
@@ -49,6 +51,8 @@ void load_users();
 void save_user(string id, string pw);
 void error_handling(string msg);
 void remove_user(int sock);
+void broadcast_room_users(int roomID);
+void leave_room_logic(int sock, int roomID); // helper for leave logic
 
 int main() {
     // 1. Load User DB from file
@@ -61,6 +65,10 @@ int main() {
     serv_adr.sin_family = AF_INET;
     serv_adr.sin_addr.s_addr = htonl(INADDR_ANY);
     serv_adr.sin_port = htons(PORT);
+
+    // Reuse Port option (prevents bind error)
+    int opt = 1;
+    setsockopt(serv_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     if (bind(serv_sock, (struct sockaddr*)&serv_adr, sizeof(serv_adr)) == -1)
         error_handling("bind() error");
@@ -86,7 +94,7 @@ int main() {
             int cur_fd = ep_events[i].data.fd;
 
             if (cur_fd == serv_sock) {
-                // [New Connection]
+                // New Connection
                 struct sockaddr_in clnt_adr;
                 socklen_t adr_sz = sizeof(clnt_adr);
                 int clnt_sock = accept(serv_sock, (struct sockaddr*)&clnt_adr, &adr_sz);
@@ -96,24 +104,24 @@ int main() {
                 epoll_ctl(epoll_fd, EPOLL_CTL_ADD, clnt_sock, &event);
 
                 // Create temporary User object (Not logged in yet)
-                User* newUser = new User{clnt_sock, "", -1, false};
+                User* newUser = new User{clnt_sock, "", "", -1, false};
                 connectedUsers[clnt_sock] = newUser;
                 cout << "[System] Client connected: " << clnt_sock << endl;
             }
             else {
-                // [Data Received]
+                // Data Received
                 Packet p;
                 int str_len = read(cur_fd, &p, sizeof(Packet));
 
                 if (str_len <= 0) {
-                    // [Disconnection]
+                    // Disconnection
                     epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cur_fd, NULL);
                     close(cur_fd);
                     remove_user(cur_fd); // Clean up user data
                     cout << "[System] Client disconnected: " << cur_fd << endl;
                 }
                 else {
-                    // [Process Packet]
+                    // Process Packet
                     handle_packet(cur_fd, p);
                 }
             }
@@ -173,7 +181,12 @@ void handle_packet(int sock, Packet& p) {
             Room* newRoom = new Room();
             newRoom->id = roomIDCounter++;
             newRoom->title = p.msg; // Room Title comes in 'msg' field
+            newRoom->password = p.pwd;
             newRoom->userSockets.push_back(sock);
+
+            // store nickname from fileName field
+            u->nickname = string(p.fileName);
+            if(u->nickname.empty()) u->nickname = u->id;
 
             activeRooms[newRoom->id] = newRoom;
             u->currentRoomID = newRoom->id;
@@ -184,35 +197,84 @@ void handle_packet(int sock, Packet& p) {
             strcpy(res.msg, newRoom->title.c_str());
             send_packet(sock, res);
 
-            cout << "[Room] Created: " << newRoom->title << " (ID: " << newRoom->id << ")" << endl;
+            cout << "[Room] Created: " << newRoom->title << " by " << u->nickname << endl;
+            broadcast_room_users(newRoom->id);
             break;
         }
 
-        // [4] Join Room (Simple implementation: By Room ID)
+        // [4] Join Room
         case CMD_JOIN_ROOM: {
              if (!u->isLoggedIn) return;
              int targetRoomID = p.roomID;
 
              if (activeRooms.find(targetRoomID) != activeRooms.end()) {
                  Room* r = activeRooms[targetRoomID];
-                 r->userSockets.push_back(sock);
+
+                 // Check Password
+                 if (!r->password.empty() && r->password != string(p.pwd)) {
+                     // Wrong password -> Send failure packet
+                     Packet errP;
+                     errP.cmd = CMD_LOGIN_FAIL;
+                     strcpy(errP.msg, "Incorrect Password!");
+                     send_packet(sock, errP);
+                     return;
+                 }
+
+                 // check duplicate socket to avoid triple message
+                 bool alreadyIn = false;
+                 for(int s : r->userSockets) {
+                     if(s == sock) { alreadyIn = true; break; }
+                 }
+                 if(!alreadyIn) {
+                     r->userSockets.push_back(sock);
+                 }
+
+                 // store nickname from msg field
+                 u->nickname = string(p.msg);
+                 if(u->nickname.empty()) u->nickname = u->id;
+
                  u->currentRoomID = targetRoomID;
 
                  res.cmd = CMD_JOIN_ROOM;
                  res.roomID = r->id;
                  strcpy(res.msg, r->title.c_str());
                  send_packet(sock, res);
-                 cout << "[Room] " << u->id << " joined Room " << targetRoomID << endl;
+
+                 Packet joinMsg;
+                 joinMsg.cmd = CMD_MSG;
+                 joinMsg.roomID = r->id;
+                 strcpy(joinMsg.id, "System");
+
+                 // use nickname for system message
+                 string noti = u->nickname + " joined the chat.";
+                 strcpy(joinMsg.msg, noti.c_str());
+
+                 for (int s : r->userSockets) {
+                     if (s != sock) send_packet(s, joinMsg);
+                 }
+
+                 // refresh userlist
+                 broadcast_room_users(r->id);
              }
              break;
+        }
+
+        // Leave Room
+        case CMD_LEAVE_ROOM: {
+            if (!u->isLoggedIn || u->currentRoomID == -1) return;
+            leave_room_logic(sock, u->currentRoomID);
+            u->currentRoomID = -1; // back to lobby
+            break;
         }
 
         // [5] Room List Request (For Lobby)
         case CMD_ROOM_LIST: {
              string listStr = "";
              for(auto const& [key, val] : activeRooms) {
-                 // Format: "ID:Title,"
-                 listStr += to_string(key) + ":" + val->title + ",";
+                 // Changed lock emoji to text "(Private)"
+                 string lockIcon = val->password.empty() ? "" : " (Private)";
+                 // Format: "ID room: Title"
+                 listStr += to_string(key) + " room: " + val->title + lockIcon + ",";
              }
              res.cmd = CMD_ROOM_LIST;
              strcpy(res.msg, listStr.c_str());
@@ -226,6 +288,9 @@ void handle_packet(int sock, Packet& p) {
 
             Room* r = activeRooms[u->currentRoomID];
             if (r) {
+                // replace ID with nickname
+                strcpy(p.id, u->nickname.c_str());
+
                 // Broadcast to everyone in the room
                 for (int s : r->userSockets) {
                     send_packet(s, p);
@@ -239,10 +304,13 @@ void handle_packet(int sock, Packet& p) {
              if (!u->isLoggedIn || u->currentRoomID == -1) return;
              Room* r = activeRooms[u->currentRoomID];
              if (r) {
+                 // replace ID with nickname
+                 strcpy(p.id, u->nickname.c_str());
+
                  for (int s : r->userSockets) {
                      if (s != sock) send_packet(s, p); // Don't echo back to sender
                  }
-                 cout << "[File] " << u->id << " sent a file." << endl;
+                 cout << "[File] " << u->nickname << " sent a file." << endl;
              }
              break;
         }
@@ -270,14 +338,39 @@ void save_user(string id, string pw) {
     file.close();
 }
 
+// Logic for leaving room (used by CMD_LEAVE_ROOM and remove_user)
+void leave_room_logic(int sock, int roomID) {
+    if (activeRooms.find(roomID) == activeRooms.end()) return;
+    Room* r = activeRooms[roomID];
+    User* u = connectedUsers[sock];
+
+    // remove socket from vector
+    for(auto it = r->userSockets.begin(); it != r->userSockets.end(); ) {
+        if(*it == sock) it = r->userSockets.erase(it);
+        else ++it;
+    }
+
+    // broadcast exit message with nickname
+    Packet msgP;
+    msgP.cmd = CMD_MSG;
+    msgP.roomID = roomID;
+    strcpy(msgP.id, "System");
+    string noti = u->nickname + " left the chat.";
+    strcpy(msgP.msg, noti.c_str());
+
+    for (int s : r->userSockets) send_packet(s, msgP);
+
+    // refresh userlist for others
+    broadcast_room_users(roomID);
+
+    // Room persists even if empty
+}
+
 void remove_user(int sock) {
     if (connectedUsers.find(sock) != connectedUsers.end()) {
         User* u = connectedUsers[sock];
-        // Remove from current room if any
-        if (u->currentRoomID != -1 && activeRooms.find(u->currentRoomID) != activeRooms.end()) {
-            Room* r = activeRooms[u->currentRoomID];
-            // Erase-remove idiom for vector
-            r->userSockets.erase(std::remove(r->userSockets.begin(), r->userSockets.end(), sock), r->userSockets.end());
+        if (u->currentRoomID != -1) {
+            leave_room_logic(sock, u->currentRoomID);
         }
         delete u;
         connectedUsers.erase(sock);
@@ -287,4 +380,27 @@ void remove_user(int sock) {
 void error_handling(string msg) {
     cerr << "[Error] " << msg << endl;
     exit(1);
+}
+
+// userlist refresh and send
+void broadcast_room_users(int roomID) {
+    // check if a room exists
+    if (activeRooms.find(roomID) == activeRooms.end()) return;
+    Room* r = activeRooms[roomID];
+
+    // userlist (ex: "user1,user2,user3,")
+    string userList = "";
+    for (int s : r->userSockets) {
+        if (connectedUsers.find(s) != connectedUsers.end()) {
+            // send nickname instead of id
+            userList += connectedUsers[s]->nickname + ",";
+        }
+    }
+
+    Packet p;
+    p.cmd = CMD_USER_LIST;
+    strcpy(p.msg, userList.c_str());
+
+    // new userlist send to everybody in room
+    for (int s : r->userSockets) send_packet(s, p);
 }

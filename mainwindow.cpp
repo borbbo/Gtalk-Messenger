@@ -1,7 +1,15 @@
 ﻿#include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include <QMessageBox>
-#include <QInputDialog> // Required for Room Title Input
+#include <QInputDialog>
+#include <QDir>
+
+// Headers for Custom Dialog
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QLabel>
+#include <QCheckBox>
+#include <QDialogButtonBox>
 
 // Linux System Headers
 extern "C" {
@@ -22,6 +30,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Start at Page 0 (Login Screen)
     ui->stackedWidget->setCurrentIndex(0);
+
+    // enter -> send
+    connect(ui->msgEdit, &QLineEdit::returnPressed, this, &MainWindow::on_sendBtn_clicked);
 }
 
 MainWindow::~MainWindow()
@@ -58,7 +69,7 @@ void MainWindow::connectToServer() {
 
 // ============================================================
 // [PART A] User Authentication & Lobby Logic
-// To be implemented by Team Member A
+// To be implemented by Team Member siyeon
 // ============================================================
 
 // 1. Login Button Logic
@@ -103,17 +114,71 @@ void MainWindow::on_registerBtn_clicked() {
     ::write(sock, &p, sizeof(p));
 }
 
-// 3. Create Room Button Logic
+// 3. Create Room Button Logic (Updated: Custom Dialog)
 void MainWindow::on_createRoomBtn_clicked() {
-    bool ok;
-    QString title = QInputDialog::getText(this, "Create Room", "Enter Room Title:", QLineEdit::Normal, "", &ok);
-    if (!ok || title.isEmpty()) return;
+    // Create a custom dialog
+    QDialog dialog(this);
+    dialog.setWindowTitle("Create Room");
 
-    Packet p;
-    p.cmd = CMD_CREATE_ROOM;
-    strcpy(p.id, myId.toStdString().c_str());
-    strcpy(p.msg, title.toStdString().c_str());
-    ::write(sock, &p, sizeof(p));
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+
+    layout->setSpacing(5);
+
+    // Room Title Input
+    QLabel *titleLabel = new QLabel("Room Title:");
+    QLineEdit *titleEdit = new QLineEdit();
+    layout->addWidget(titleLabel);
+    layout->addWidget(titleEdit);
+
+    // Nickname Input
+    QLabel *nickLabel = new QLabel("Your Nickname:");
+    QLineEdit *nickEdit = new QLineEdit();
+    nickEdit->setText(myId); // default nickname is ID
+    layout->addWidget(nickLabel);
+    layout->addWidget(nickEdit);
+
+    // Password Checkbox
+    QCheckBox *pwCheck = new QCheckBox("Use Password");
+    layout->addWidget(pwCheck);
+
+    // Password Input (Initially disabled)
+    QLineEdit *pwEdit = new QLineEdit();
+    pwEdit->setPlaceholderText("Password");
+    pwEdit->setEchoMode(QLineEdit::Password);
+    pwEdit->setEnabled(false); // Default: disabled
+    layout->addWidget(pwEdit);
+
+    // Enable password input only when checked
+    connect(pwCheck, &QCheckBox::toggled, pwEdit, &QLineEdit::setEnabled);
+
+    layout->addSpacing(15);
+
+    // Buttons
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    // Show dialog
+    if (dialog.exec() == QDialog::Accepted) {
+        QString title = titleEdit->text();
+        QString nickname = nickEdit->text();
+        QString pwd = pwCheck->isChecked() ? pwEdit->text() : "";
+
+        if(title.isEmpty()) return;
+        if(nickname.isEmpty()) nickname = myId;
+
+        Packet p;
+        p.cmd = CMD_CREATE_ROOM;
+        strcpy(p.id, myId.toStdString().c_str());
+        strcpy(p.msg, title.toStdString().c_str());
+        strcpy(p.pwd, pwd.toStdString().c_str());
+
+        // send nickname via fileName field
+        strcpy(p.fileName, nickname.toStdString().c_str());
+
+        ::write(sock, &p, sizeof(p));
+    }
 }
 
 // 4. Refresh Button Logic
@@ -127,22 +192,40 @@ void MainWindow::on_refreshBtn_clicked() {
 // 5. Join Room Logic (Double Click)
 void MainWindow::on_roomListWidget_itemDoubleClicked(QListWidgetItem *item) {
     QString text = item->text();
-    // Parse Room ID from string "ID:Title"
-    QStringList parts = text.split(":");
-    if(parts.size() < 2) return;
+    // Parse Room ID from string "1 room: Title (Private)"
+    QStringList parts = text.split(" ");
+    if(parts.isEmpty()) return;
 
     int roomID = parts.first().toInt();
+
+    // ask for nickname first
+    bool ok;
+    QString nickname = QInputDialog::getText(this, "Set Nickname", "Enter your nickname for this room:", QLineEdit::Normal, myId, &ok);
+    if (!ok) return;
+    if (nickname.isEmpty()) nickname = myId;
+
+    // pwd check (Updated: check for English text)
+    QString pwd = "";
+    if (text.contains("(Private)")) {
+        pwd = QInputDialog::getText(this, "Private Room", "Enter Password:", QLineEdit::Password, "", &ok);
+        if (!ok) return;
+    }
 
     Packet p;
     p.cmd = CMD_JOIN_ROOM;
     strcpy(p.id, myId.toStdString().c_str());
     p.roomID = roomID;
+    strcpy(p.pwd, pwd.toStdString().c_str());
+
+    // send nickname via msg field
+    strcpy(p.msg, nickname.toStdString().c_str());
+
     ::write(sock, &p, sizeof(p));
 }
 
 // ============================================================
 // [PART B] Chat & File Transfer Logic
-// To be implemented by Team Member B
+// To be implemented by Team Member nyeongyeong
 // ============================================================
 
 // 1. Send Message Logic
@@ -188,9 +271,18 @@ void MainWindow::on_fileBtn_clicked() {
 
 // 3. Leave Room Logic
 void MainWindow::on_leaveBtn_clicked() {
+    // Send LEAVE packet to server
+    Packet p;
+    p.cmd = CMD_LEAVE_ROOM;
+    strcpy(p.id, myId.toStdString().c_str());
+    ::write(sock, &p, sizeof(p));
+
     // Go back to Lobby (Page 1)
     ui->stackedWidget->setCurrentIndex(1);
+
+    // Clear UI
     ui->textBrowser->clear();
+    ui->userListWidget->clear();
     currentRoomID = -1;
 
     // Refresh room list
@@ -219,7 +311,7 @@ void MainWindow::on_socket_read() {
         on_refreshBtn_clicked();
     }
     else if(p.cmd == CMD_LOGIN_FAIL) {
-        QMessageBox::warning(this, "Login Failed", p.msg);
+        QMessageBox::warning(this, "Error", p.msg);
     }
     else if(p.cmd == CMD_ROOM_LIST) {
         ui->roomListWidget->clear();
@@ -231,11 +323,36 @@ void MainWindow::on_socket_read() {
         currentRoomID = p.roomID;
         ui->stackedWidget->setCurrentIndex(2); // Go to Chat Room
         ui->textBrowser->append("=== Entered Room: " + QString::fromUtf8(p.msg) + " ===");
+        ui->msgEdit->setFocus();
     }
     else if(p.cmd == CMD_MSG) {
-        ui->textBrowser->append("[" + QString(p.id) + "] " + QString::fromUtf8(p.msg));
+        if(strcmp(p.id, "System") == 0) {
+             ui->textBrowser->append("<font color='blue'><b>[System] " + QString::fromUtf8(p.msg) + "</b></font>");
+        } else {
+             ui->textBrowser->append("[" + QString(p.id) + "] " + QString::fromUtf8(p.msg));
+        }
     }
     else if(p.cmd == CMD_FILE) {
-        ui->textBrowser->append(">>> File from " + QString(p.id) + ": " + QString(p.fileName));
+            QString sender = QString(p.id);         // Sender's nickname
+            QString fileName = QString(p.fileName); // File name
+
+            // Save received data to file. Save to Home Directory
+            QString saveName = QDir::homePath() + "/received_" + fileName;
+
+            QFile file(saveName);
+            if(file.open(QIODevice::WriteOnly)) {
+                file.write(p.data, p.data_len); // Write binary data from packet
+                file.close();
+
+                ui->textBrowser->append(">>> [File Saved] " + saveName + " (from " + sender + ")");
+            } else {
+                ui->textBrowser->append(">>> [Error] Failed to save file.");
+            }
+        }
+    else if(p.cmd == CMD_USER_LIST) {
+        ui->userListWidget->clear();
+        QString listStr = QString::fromUtf8(p.msg);
+        QStringList users = listStr.split(",", Qt::SkipEmptyParts);
+        for(const QString& u : users) ui->userListWidget->addItem(u);
     }
 }
